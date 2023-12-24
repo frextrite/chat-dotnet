@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+option csharp_namespace = "chat_dotnet";
+
+package chat;
+
+service Chatter {
+    rpc ProbeHealth (HealthRequest) returns (HealthReply);
+    rpc SendAndReceiveMessages(stream ChatMessage) returns (stream ChatMessage);
+}
+
+message HealthRequest {}
+
+message HealthReply {}
+
+message ChatMessage {
+    string author = 1;
+    string message = 2;
+}
