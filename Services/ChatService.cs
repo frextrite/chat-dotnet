@@ -15,4 +15,13 @@ public class ChatterService : Chatter.ChatterBase
         Console.WriteLine($"INFO: Received health probe request from {context.Peer} with host {context.Host}");
         return Task.FromResult(new HealthReply{});
     }
+
+    public override async Task SendAndReceiveMessages(IAsyncStreamReader<ChatMessage> requestStream, IServerStreamWriter<ChatMessage> responseStream, ServerCallContext context)
+    {
+        Console.WriteLine($"INFO: Received message request from {context.Peer} with host {context.Host}");
+        await foreach (var message in requestStream.ReadAllAsync())
+        {
+            await responseStream.WriteAsync(message);
+        }
+    }
 }
