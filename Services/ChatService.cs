@@ -37,9 +37,9 @@ public class ChatterService : Chatter.ChatterBase
                     await responseStream.WriteAsync(message, context.CancellationToken);
                 }
             }
-            catch (Exception e)
+            catch (OperationCanceledException e)
             {
-                _logger.LogError(e, "Error while writing messages to client {}", context.Peer);
+                _logger.LogInformation(e, "SendAndReceiveMessages cancelled for client {}", context.Peer);
             }
         });
 
