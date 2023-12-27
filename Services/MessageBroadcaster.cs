@@ -26,16 +26,34 @@ public class MessageBroadcaster : IMessageBroadcaster
                 try
                 {
                     _logger.LogInformation("Broadcasting message {} to {} clients", message, _clients.Count);
-                    foreach (var client in _clients) {
+                    for (int i = _clients.Count - 1; i >= 0; i--) {
+                        var client = _clients[i];
                         // TODO: do not echo to the sender
                         // TODO: do not use locks instead use a channel for adding / removing client
                         // TODO: solve the problem of slow clients
-                        if (!client.Item2.IsCancellationRequested)
+                        if (client.Item2.IsCancellationRequested)
                         {
-                            await client.Item1.WriteAsync(message, client.Item2);
+                            _clients.RemoveAt(i);
                         }
-                        // TODO: else remove this client
-                        // TODO: handle race between iscancellationrequested and writeasync
+                        else
+                        {
+                            // TODO: is this the right way to handle cancellation?
+                            //       verify what happens if the token is cancelled while
+                            //       WriteAsync is in progress
+
+                            // TODO: handle race between iscancellationrequested and writeasync
+                            //       WriteAsync might still block if cancellation happens
+                            //       after the if statement executes and before write starts
+                            try
+                            {
+                                await client.Item1.WriteAsync(message, client.Item2);
+                            }
+                            catch (Exception e)
+                            {
+                                _logger.LogError(e, "Error while broadcasting message to client {}", client);
+                                _clients.RemoveAt(i);
+                            }
+                        }
                     }
                 }
                 finally

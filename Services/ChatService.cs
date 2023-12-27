@@ -23,10 +23,20 @@ public class ChatterService : Chatter.ChatterBase
     {
         _logger.LogInformation("Received message request from {} with host {}", context.Peer, context.Host);
         await _broadcaster.AddClient(responseStream, context.CancellationToken);
-        while (await requestStream.MoveNext())
+        // gRPC docs mention MoveNext() cannot throw in service implementation
+        // but it does...
+        // https://github.com/grpc/grpc-dotnet/issues/1219
+        try
         {
-            var message = requestStream.Current;
-            await _broadcaster.BroadcastMessage(message);
+            while (await requestStream.MoveNext())
+            {
+                var message = requestStream.Current;
+                await _broadcaster.BroadcastMessage(message);
+            }
+        }
+        catch (Exception e)
+        {
+            _logger.LogError(e, "Error while receiving messages from client {}", context.Peer);
         }
     }
 }
