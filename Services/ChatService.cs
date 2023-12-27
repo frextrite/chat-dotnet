@@ -29,10 +29,17 @@ public class ChatterService : Chatter.ChatterBase
         // does this work?
         var writeTask = Task.Run(async () => {
             // throws exceptions and exits cleanly?
-            while (await broadcastedMessages.Reader.WaitToReadAsync(context.CancellationToken))
+            try
             {
-                var message = await broadcastedMessages.Reader.ReadAsync(context.CancellationToken);
-                await responseStream.WriteAsync(message, context.CancellationToken);
+                while (await broadcastedMessages.Reader.WaitToReadAsync(context.CancellationToken))
+                {
+                    var message = await broadcastedMessages.Reader.ReadAsync(context.CancellationToken);
+                    await responseStream.WriteAsync(message, context.CancellationToken);
+                }
+            }
+            catch (Exception e)
+            {
+                _logger.LogError(e, "Error while writing messages to client {}", context.Peer);
             }
         });
 
