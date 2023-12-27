@@ -5,11 +5,18 @@ namespace chat_dotnet.Services;
 
 public class MessageBroadcaster : IMessageBroadcaster
 {
+    private readonly ILogger<MessageBroadcaster> _logger;
     private readonly SemaphoreSlim _clientsLock = new SemaphoreSlim(1);
     private readonly List<IServerStreamWriter<ChatMessage>> _clients = new List<IServerStreamWriter<ChatMessage>>();
     private readonly Channel<ChatMessage> _channel = Channel.CreateUnbounded<ChatMessage>();
 
-    public MessageBroadcaster()
+    public MessageBroadcaster(ILogger<MessageBroadcaster> logger)
+    {
+        _logger = logger;
+        StartBroadcastingLoop();
+    }
+
+    private void StartBroadcastingLoop()
     {
         Task.Run(async () => {
             while (await _channel.Reader.WaitToReadAsync())
@@ -18,7 +25,7 @@ public class MessageBroadcaster : IMessageBroadcaster
                 await _clientsLock.WaitAsync();
                 try
                 {
-                    Console.WriteLine($"INFO: Broadcasting message {message} to {_clients.Count} clients");
+                    _logger.LogInformation("Broadcasting message {} to {} clients", message, _clients.Count);
                     foreach (var client in _clients) {
                         // TODO: handle broken streams
                         // TODO: do not echo to the sender
@@ -37,7 +44,7 @@ public class MessageBroadcaster : IMessageBroadcaster
 
     public async Task AddClient(IServerStreamWriter<ChatMessage> client)
     {
-        Console.WriteLine($"INFO: Adding a new client {client}");
+        _logger.LogInformation("Adding a new client {}", client);
         await _clientsLock.WaitAsync();
         try
         {
@@ -51,7 +58,6 @@ public class MessageBroadcaster : IMessageBroadcaster
 
     public async Task BroadcastMessage(ChatMessage message)
     {
-        Console.WriteLine($"INFO: Broadcasting message {message}");
         await _channel.Writer.WriteAsync(message);
     }
 }
