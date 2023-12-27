@@ -4,6 +4,6 @@ namespace chat_dotnet.Services;
 
 public interface IMessageBroadcaster
 {
-    Task AddClient(IServerStreamWriter<ChatMessage> client);
+    Task AddClient(IServerStreamWriter<ChatMessage> client, CancellationToken cancellationToken);
     Task BroadcastMessage(ChatMessage message);
 }

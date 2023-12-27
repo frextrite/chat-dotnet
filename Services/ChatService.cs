@@ -22,7 +22,7 @@ public class ChatterService : Chatter.ChatterBase
     public override async Task SendAndReceiveMessages(IAsyncStreamReader<ChatMessage> requestStream, IServerStreamWriter<ChatMessage> responseStream, ServerCallContext context)
     {
         _logger.LogInformation("Received message request from {} with host {}", context.Peer, context.Host);
-        await _broadcaster.AddClient(responseStream);
+        await _broadcaster.AddClient(responseStream, context.CancellationToken);
         while (await requestStream.MoveNext())
         {
             var message = requestStream.Current;
