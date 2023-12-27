@@ -1,3 +1,4 @@
+using System.Threading.Channels;
 using Grpc.Core;
 
 namespace chat_dotnet.Services;
@@ -22,7 +23,20 @@ public class ChatterService : Chatter.ChatterBase
     public override async Task SendAndReceiveMessages(IAsyncStreamReader<ChatMessage> requestStream, IServerStreamWriter<ChatMessage> responseStream, ServerCallContext context)
     {
         _logger.LogInformation("Received message request from {} with host {}", context.Peer, context.Host);
-        await _broadcaster.AddClient(responseStream, context.CancellationToken);
+
+        var broadcastedMessages = Channel.CreateUnbounded<ChatMessage>();
+        // token should get cancelled when SendAndReceiveMessages completes (returns or throws exception)
+        // does this work?
+        var writeTask = Task.Run(async () => {
+            // throws exceptions and exits cleanly?
+            while (await broadcastedMessages.Reader.WaitToReadAsync(context.CancellationToken))
+            {
+                var message = await broadcastedMessages.Reader.ReadAsync(context.CancellationToken);
+                await responseStream.WriteAsync(message, context.CancellationToken);
+            }
+        });
+
+        await _broadcaster.AddClient(context.Peer, broadcastedMessages);
         // gRPC docs mention MoveNext() cannot throw in service implementation
         // but it does...
         // https://github.com/grpc/grpc-dotnet/issues/1219
@@ -39,5 +53,7 @@ public class ChatterService : Chatter.ChatterBase
         {
             _logger.LogError(e, "Error while receiving messages from client {}", context.Peer);
         }
+
+        await _broadcaster.RemoveClient(context.Peer);
     }
 }

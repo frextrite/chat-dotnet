@@ -7,7 +7,7 @@ public class MessageBroadcaster : IMessageBroadcaster
 {
     private readonly ILogger<MessageBroadcaster> _logger;
     private readonly SemaphoreSlim _clientsLock = new SemaphoreSlim(1);
-    private readonly List<Tuple<IServerStreamWriter<ChatMessage>, CancellationToken>> _clients = new List<Tuple<IServerStreamWriter<ChatMessage>, CancellationToken>>();
+    private readonly Dictionary<string, Channel<ChatMessage>> _clients = new Dictionary<string, Channel<ChatMessage>>();
     private readonly Channel<ChatMessage> _channel = Channel.CreateUnbounded<ChatMessage>();
 
     public MessageBroadcaster(ILogger<MessageBroadcaster> logger)
@@ -23,34 +23,20 @@ public class MessageBroadcaster : IMessageBroadcaster
             {
                 var message = await _channel.Reader.ReadAsync();
                 await _clientsLock.WaitAsync();
+                // TODO: do not use locks instead use a channel for adding / removing client
+                // TODO: remove this try block and handle exception near WriteAsync
                 try
                 {
-                    _logger.LogInformation("Attempting to broadcast message {} to {} clients", message, _clients.Count);
-                    int numSuccessfulBroadcasts = 0;
-                    for (int i = _clients.Count - 1; i >= 0; i--) {
-                        var client = _clients[i];
-                        // TODO: do not echo to the sender
-                        // TODO: do not use locks instead use a channel for adding / removing client
-                        // TODO: solve the problem of slow clients
-                        if (client.Item2.IsCancellationRequested)
-                        {
-                            _clients.RemoveAt(i);
-                        }
-                        else
-                        {
-                            try
-                            {
-                                await client.Item1.WriteAsync(message, client.Item2);
-                                numSuccessfulBroadcasts++;
-                            }
-                            catch (Exception e)
-                            {
-                                _logger.LogError(e, "Error while broadcasting message to client {}", client);
-                                _clients.RemoveAt(i);
-                            }
-                        }
+                    _logger.LogInformation("Broadcasting message {} to {} clients", message, _clients.Count);
+                    // TODO: do not echo to the sender
+                    foreach (var client in _clients)
+                    {
+                        await client.Value.Writer.WriteAsync(message);
                     }
-                    _logger.LogInformation("Successfully broadcast message {} to {} clients", message, numSuccessfulBroadcasts);
+                }
+                catch (Exception e)
+                {
+                    _logger.LogError(e, "Error while broadcasting message {}", message);
                 }
                 finally
                 {
@@ -60,13 +46,13 @@ public class MessageBroadcaster : IMessageBroadcaster
         });
     }
 
-    public async Task AddClient(IServerStreamWriter<ChatMessage> client, CancellationToken cancellationToken)
+    public async Task AddClient(string client, Channel<ChatMessage> channel)
     {
         _logger.LogInformation("Adding a new client {}", client);
         await _clientsLock.WaitAsync();
         try
         {
-            _clients.Add(new Tuple<IServerStreamWriter<ChatMessage>, CancellationToken>(client, cancellationToken));
+            _clients.Add(client, channel);
         }
         finally
         {
@@ -74,6 +60,22 @@ public class MessageBroadcaster : IMessageBroadcaster
         }
     }
 
+    public async Task RemoveClient(string client)
+    {
+        _logger.LogInformation("Removing client {}", client);
+        await _clientsLock.WaitAsync();
+        try
+        {
+            _clients.Remove(client);
+        }
+        finally
+        {
+            _clientsLock.Release();
+        }
+    }
+
+    // Internal queue is needed to serialize calls to BroadcastMessage from multi-threaded gRPC environment
+    // Alternative was to move the processing inside BroadcastMessage but the client loop in that case should be protected by a lock which will lead to high lock contention
     public async Task BroadcastMessage(ChatMessage message)
     {
         await _channel.Writer.WriteAsync(message);
