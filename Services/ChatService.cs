@@ -26,6 +26,7 @@ public class ChatterService : Chatter.ChatterBase
         // gRPC docs mention MoveNext() cannot throw in service implementation
         // but it does...
         // https://github.com/grpc/grpc-dotnet/issues/1219
+        // Throwing exception might still be valid, verify and remove try catch
         try
         {
             while (await requestStream.MoveNext())

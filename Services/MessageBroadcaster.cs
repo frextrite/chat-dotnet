@@ -25,7 +25,8 @@ public class MessageBroadcaster : IMessageBroadcaster
                 await _clientsLock.WaitAsync();
                 try
                 {
-                    _logger.LogInformation("Broadcasting message {} to {} clients", message, _clients.Count);
+                    _logger.LogInformation("Attempting to broadcast message {} to {} clients", message, _clients.Count);
+                    int numSuccessfulBroadcasts = 0;
                     for (int i = _clients.Count - 1; i >= 0; i--) {
                         var client = _clients[i];
                         // TODO: do not echo to the sender
@@ -37,16 +38,10 @@ public class MessageBroadcaster : IMessageBroadcaster
                         }
                         else
                         {
-                            // TODO: is this the right way to handle cancellation?
-                            //       verify what happens if the token is cancelled while
-                            //       WriteAsync is in progress
-
-                            // TODO: handle race between iscancellationrequested and writeasync
-                            //       WriteAsync might still block if cancellation happens
-                            //       after the if statement executes and before write starts
                             try
                             {
                                 await client.Item1.WriteAsync(message, client.Item2);
+                                numSuccessfulBroadcasts++;
                             }
                             catch (Exception e)
                             {
@@ -55,6 +50,7 @@ public class MessageBroadcaster : IMessageBroadcaster
                             }
                         }
                     }
+                    _logger.LogInformation("Successfully broadcast message {} to {} clients", message, numSuccessfulBroadcasts);
                 }
                 finally
                 {
